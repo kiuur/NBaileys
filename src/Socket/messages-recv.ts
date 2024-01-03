@@ -205,6 +205,14 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 				logger.info({ msgAttrs: node.attrs, retryCount }, 'sent retry receipt')
 			}
 		)
+		if(retryRequestDelayMs) {
+			await delay(retryRequestDelayMs)
+			const newRetryCount = msgRetryCache.get<number>(msgId);
+			// if send retry failed
+			if (retryCount == newRetryCount) {
+				await sendRetryRequest(node, forceIncludeKeys)
+			}
+		}
 	}
 
 	const handleEncryptNotification = async(node: BinaryNode) => {

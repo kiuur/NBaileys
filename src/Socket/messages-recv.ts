@@ -710,6 +710,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							}
 						)
 					} else {
+						// remove message from retry cache
+						msgRetryCache.del(node.attrs.id)
+						
 						// no type in the receipt => message delivered
 						let type: MessageReceiptType = undefined
 						let participant = msg.key.participant

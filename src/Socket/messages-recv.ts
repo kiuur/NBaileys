@@ -670,6 +670,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const handleMessage = async(node: BinaryNode) => {
+		if (node.attrs.from) {
+			node.attrs.from = node.attrs.from.replace(/:(.*)@/, "@")
+		}
+
 		const { fullMessage: msg, category, author, decrypt } = decryptMessageNode(
 			node,
 			authState.creds.me!.id,

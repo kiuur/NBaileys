@@ -130,7 +130,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const sendRetryRequest = async(node: BinaryNode, forceIncludeKeys = false) => {
 		const msgId = node.attrs.id
 
-		let retryCount = msgRetryCache.get<number>(msgId) || 0
+		let retryCount = Number(`${msgRetryCache.get<number>(msgId) || 0}`);
 		if(retryCount >= maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
 			msgRetryCache.del(msgId)
@@ -670,7 +670,9 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const handleMessage = async(node: BinaryNode) => {
-		if (node.attrs.from) {
+		const originalFrom = `${node.attrs.from || ""}`
+
+		if (originalFrom && (msgRetryCache.get<number>(node.attrs?.id || "") || 0) > 0) {
 			node.attrs.from = node.attrs.from.replace(/:(.*)@/, "@")
 		}
 
@@ -732,12 +734,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							type = 'inactive'
 						}
 
-						await sendReceipt(msg.key.remoteJid!, participant!, [msg.key.id!], type)
+						await sendReceipt(originalFrom!, participant!, [msg.key.id!], type)
 
 						// send ack for history message
 						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
 						if(isAnyHistoryMsg) {
-							const jid = jidNormalizedUser(msg.key.remoteJid!)
+							const jid = jidNormalizedUser(originalFrom!)
 							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
 						}
 					}

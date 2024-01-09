@@ -7,7 +7,7 @@ import open from 'open'
 import fs from 'fs'
 
 const logger = MAIN_LOGGER.child({})
-logger.level = 'trace'
+logger.level = 'debug'
 
 const useStore = !process.argv.includes('--no-store')
 const doReplies = !process.argv.includes('--no-reply')
@@ -43,6 +43,8 @@ const startSock = async() => {
 		logger,
 		printQRInTerminal: !usePairingCode,
 		mobile: useMobile,
+		maxMsgRetryCount: 15,
+		retryRequestDelayMs: 500,
 		auth: {
 			creds: state.creds,
 			/** caching makes the store faster to send/recv messages */
@@ -213,8 +215,8 @@ const startSock = async() => {
 					for(const msg of upsert.messages) {
 						if(!msg.key.fromMe && doReplies) {
 							console.log('replying to', msg.key.remoteJid)
-							await sock!.readMessages([msg.key])
-							await sendMessageWTyping({ text: 'Hello there!' }, msg.key.remoteJid!)
+							// await sock!.readMessages([msg.key])
+							// await sendMessageWTyping({ text: 'Hello there!' }, msg.key.remoteJid!)
 						}
 					}
 				}

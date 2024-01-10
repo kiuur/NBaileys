@@ -675,10 +675,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	}
 
 	const handleMessage = async(node: BinaryNode) => {
-		const originalFrom = `${node.attrs.from || ""}`
+		const userJid = `${node.attrs.from || ""}`
 
-		if (originalFrom && (msgRetryCache.get<number>(node.attrs?.id || "") || 0) > 0) {
-			node.attrs.from = node.attrs.from.replace(/:(.*)@/, "@")
+		// normalizes only when the quantity is odd for greater jid variation (necessary to receive failure messages, bugged WhatsApp...)
+		if (userJid && (msgRetryCache.get<number>(node.attrs?.id || "") || 0) % 2 != 0) {
+			node.attrs.from = jidNormalizedUser(node.attrs.from)
 		}
 
 		const { fullMessage: msg, category, author, decrypt } = decryptMessageNode(
@@ -742,12 +743,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							type = 'inactive'
 						}
 
-						await sendReceipt(originalFrom!, participant!, [msg.key.id!], type)
+						await sendReceipt(userJid!, participant!, [msg.key.id!], type)
 
 						// send ack for history message
 						const isAnyHistoryMsg = getHistoryMsg(msg.message!)
 						if(isAnyHistoryMsg) {
-							const jid = jidNormalizedUser(originalFrom!)
+							const jid = jidNormalizedUser(userJid!)
 							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
 						}
 					}

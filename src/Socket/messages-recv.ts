@@ -130,15 +130,17 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const sendRetryRequest = async(node: BinaryNode, forceIncludeKeys = false) => {
 		const msgId = node.attrs.id
 
-		const msgRetryCount = msgRetryCache.get<number>(msgId)
+		const msgRetryCount = msgRetryCache.get<number | boolean | null>(msgId)
 
+		if(msgRetryCount === true) return;
+		if(msgRetryCount === false) return;
 		if(msgRetryCount === null) return;
 
 		let retryCount = Number(msgRetryCount || 0)
 
 		if(retryCount >= maxMsgRetryCount) {
 			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			msgRetryCache.del(msgId)
+			msgRetryCache.set(msgId, false)
 			return
 		}
 
@@ -212,8 +214,7 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 		)
 		if(retryRequestDelayMs) {
 			await delay(retryRequestDelayMs)
-			const newRetryCount = msgRetryCache.get<number>(msgId);
-			// if send retry failed
+			const newRetryCount = msgRetryCache.get<number | boolean | null>(msgId);
 			if (retryCount == newRetryCount) {
 				await sendRetryRequest(node, forceIncludeKeys)
 			}
@@ -706,6 +707,10 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			processingMutex.mutex(
 				async() => {
 					await decrypt()
+					let retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
+					
+					if (retryCount === true) return;
+					if (retryCount === null) return;
 					// message failed to decrypt
 					if(msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
 						retryMutex.mutex(
@@ -713,6 +718,20 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								if(ws.isOpen) {
 									const encNode = getBinaryNodeChild(node, 'enc')
 									await sendRetryRequest(node, !encNode)
+
+									cleanMessage(msg, authState.creds.me!.id)
+
+									retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
+
+									if (retryCount == null) return;
+									if (retryCount == true) return;
+									
+									await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
+									
+									if (retryCount === false) {
+										msgRetryCache.set(node.attrs.id, null);
+									}
+
 									if(retryRequestDelayMs) {
 										await delay(retryRequestDelayMs)
 									}
@@ -722,12 +741,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							}
 						)
 					} else {
-						// remove message from retry cache
-						const retryCount = msgRetryCache.get<number>(node.attrs.id)
-						if (retryCount) {
-							msgRetryCache.set(node.attrs.id, null)
-						} else if (retryCount === null) return;
-						
+						retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
+						if (retryCount != undefined) {
+							if (retryCount === true) return;
+							msgRetryCache.set(node.attrs.id, true)
+						}
 						// no type in the receipt => message delivered
 						let type: MessageReceiptType = undefined
 						let participant = msg.key.participant
@@ -751,11 +769,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							const jid = jidNormalizedUser(userJid!)
 							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
 						}
+
+						cleanMessage(msg, authState.creds.me!.id)
+
+						await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 					}
-
-					cleanMessage(msg, authState.creds.me!.id)
-
-					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 				}
 			),
 			sendMessageAck(node)

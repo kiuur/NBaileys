@@ -718,20 +718,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 								if(ws.isOpen) {
 									const encNode = getBinaryNodeChild(node, 'enc')
 									await sendRetryRequest(node, !encNode)
-
-									cleanMessage(msg, authState.creds.me!.id)
-
-									retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
-
-									if (retryCount == null) return;
-									if (retryCount == true) return;
-									
-									await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
-									
-									if (retryCount === false) {
-										msgRetryCache.set(node.attrs.id, null);
-									}
-
 									if(retryRequestDelayMs) {
 										await delay(retryRequestDelayMs)
 									}
@@ -769,11 +755,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							const jid = jidNormalizedUser(userJid!)
 							await sendReceipt(jid, undefined, [msg.key.id!], 'hist_sync')
 						}
-
-						cleanMessage(msg, authState.creds.me!.id)
-
-						await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 					}
+
+					cleanMessage(msg, authState.creds.me!.id)
+
+					await upsertMessage(msg, node.attrs.offline ? 'append' : 'notify')
 				}
 			),
 			sendMessageAck(node)

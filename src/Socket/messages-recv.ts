@@ -130,17 +130,11 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 	const sendRetryRequest = async(node: BinaryNode, forceIncludeKeys = false) => {
 		const msgId = node.attrs.id
 
-		const msgRetryCount = msgRetryCache.get<number | boolean | null>(msgId)
-
-		if(msgRetryCount === true) return;
-		if(msgRetryCount === false) return;
-		if(msgRetryCount === null) return;
-
-		let retryCount = Number(msgRetryCount || 0)
-
+		let retryCount = msgRetryCache.get<number>(msgId) || 0
 		if(retryCount >= maxMsgRetryCount) {
-			logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
-			msgRetryCache.set(msgId, false)
+			if (retryCount == maxMsgRetryCount) {
+				logger.debug({ retryCount, msgId }, 'reached retry limit, clearing')
+			}
 			return
 		}
 
@@ -213,11 +207,12 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			}
 		)
 		if(retryRequestDelayMs) {
-			await delay(retryRequestDelayMs)
-			const newRetryCount = msgRetryCache.get<number | boolean | null>(msgId);
-			if (retryCount == newRetryCount) {
-				await sendRetryRequest(node, forceIncludeKeys)
-			}
+			delay(retryRequestDelayMs * 2).then(async () => {
+				const newRetryCount = msgRetryCache.get<number>(msgId);
+				if (retryCount == newRetryCount) {
+					processNodeWithBuffer(node, 'processing message', handleMessage)
+				}
+			})
 		}
 	}
 
@@ -707,10 +702,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 			processingMutex.mutex(
 				async() => {
 					await decrypt()
-					let retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
-					
-					if (retryCount === true) return;
-					if (retryCount === null) return;
 					// message failed to decrypt
 					if(msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
 						retryMutex.mutex(
@@ -727,11 +718,6 @@ export const makeMessagesRecvSocket = (config: SocketConfig) => {
 							}
 						)
 					} else {
-						retryCount = msgRetryCache.get<number | boolean>(node.attrs.id)
-						if (retryCount != undefined) {
-							if (retryCount === true) return;
-							msgRetryCache.set(node.attrs.id, true)
-						}
 						// no type in the receipt => message delivered
 						let type: MessageReceiptType = undefined
 						let participant = msg.key.participant
